@@ -25,7 +25,8 @@ public class RedissonService implements IRedisService {
     @Override
     public <T> void setValue(String key, T value, long expired) {
         RBucket<T> bucket = redissonClient.getBucket(key);
-        bucket.set(value, Duration.ofMillis(expired));
+        //bucket.set(value, Duration.ofMillis(expired));
+        bucket.setIfAbsent(value, Duration.ofMillis(expired));
     }
 
     public <T> T getValue(String key) {
