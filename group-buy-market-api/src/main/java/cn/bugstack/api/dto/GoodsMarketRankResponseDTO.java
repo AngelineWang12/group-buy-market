@@ -21,12 +21,10 @@ import java.util.concurrent.TimeUnit;
 @NoArgsConstructor
 public class GoodsMarketRankResponseDTO {
 
-    // 活动ID
-    private Long activityId;
     // 商品信息
     private Goods goods;
-    // 组队统计
-    private ScoreStatistic scoreStatistic;
+/*    // 组队统计
+    private ScoreStatistic scoreStatistic;*/
     // 商品得分
     private Long score;
     // 商品排名
@@ -50,18 +48,18 @@ public class GoodsMarketRankResponseDTO {
         private BigDecimal payPrice;
     }
 
-    /**
+/*    *//**
      * 组队统计
-     */
+     *//*
     @Data
     @Builder
     @AllArgsConstructor
     @NoArgsConstructor
     public static class ScoreStatistic {
-        /** 原始指标（用于展示/校验） */
+        *//** 原始指标（用于展示/校验） *//*
         private Long orderCount;       // 下单数（建议明确是“锁单成功数” or “创建订单数”）
         private Long payCount;         // 支付数
         private Long payAmountFen;     // GMV（分），可选但很有用
-    }
+    }*/
 
 }
