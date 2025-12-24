@@ -52,4 +52,5 @@ public interface ITradeRepository {
 
     NotifyTaskEntity paid2Refund(GroupBuyRefundAggregate groupBuyRefundAggregate);
 
+    String queryGoodsIdByTeamId(String teamId);
 }

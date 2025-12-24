@@ -1,5 +1,7 @@
 package cn.bugstack.domain.trade.service.settlement;
 
+import cn.bugstack.domain.activity.adapter.repository.IRankRedisRepository;
+import cn.bugstack.domain.activity.service.trial.factory.RankKeyFactory;
 import cn.bugstack.domain.trade.adapter.port.ITradePort;
 import cn.bugstack.domain.trade.adapter.repository.ITradeRepository;
 import cn.bugstack.domain.trade.model.aggregate.GroupBuyTeamSettlementAggregate;
@@ -39,6 +41,12 @@ public class TradeSettlementOrderService implements ITradeSettlementOrderService
     @Resource
     private BusinessLinkedList<TradeSettlementRuleCommandEntity, TradeSettlementRuleFilterFactory.DynamicContext, TradeSettlementRuleFilterBackEntity> tradeSettlementRuleFilter;
 
+    // 新增排行榜相关依赖
+    @Resource
+    private IRankRedisRepository rankRedisRepository;
+    @Resource
+    private RankKeyFactory rankKeyFactory;
+
     @Override
     public TradePaySettlementEntity settlementMarketPayOrder(TradePaySuccessEntity tradePaySuccessEntity) throws Exception {
         log.info("拼团交易-支付订单结算:{} outTradeNo:{}", tradePaySuccessEntity.getUserId(), tradePaySuccessEntity.getOutTradeNo());
@@ -54,6 +62,7 @@ public class TradeSettlementOrderService implements ITradeSettlementOrderService
                 new TradeSettlementRuleFilterFactory.DynamicContext());
 
         String teamId = tradeSettlementRuleFilterBackEntity.getTeamId();
+        Long activityId = tradeSettlementRuleFilterBackEntity.getActivityId();
 
         // 2. 查询组团信息
         GroupBuyTeamEntity groupBuyTeamEntity = GroupBuyTeamEntity.builder()
@@ -77,6 +86,26 @@ public class TradeSettlementOrderService implements ITradeSettlementOrderService
 
         // 4. 拼团交易结算
         NotifyTaskEntity notifyTaskEntity = repository.settlementMarketPayOrder(groupBuyTeamSettlementAggregate);
+
+//        // 5. 更新排行榜数据
+//        // 获取订单对应的商品ID（需要根据实际业务逻辑获取，这里假设从数据库中查询）
+//        String goodsId = repository.queryGoodsIdByTeamId(teamId);
+//
+//        if (goodsId != null) {
+//            // 生成排行榜键
+//            String timeWindow = "ACTIVITY"; // 活动维度的排行榜
+//            String windowKey = String.valueOf(activityId);
+//            String zsetKey = rankKeyFactory.saleKey(activityId, timeWindow, windowKey);
+//            String updateTimeKey = rankKeyFactory.saleUpdateTimeKey(activityId, timeWindow, windowKey);
+//
+//            // 更新排行榜分数
+//            rankRedisRepository.incrementRankScore(zsetKey, goodsId, 1.0);
+//
+//            // 更新排行榜更新时间
+//            rankRedisRepository.setUpdateTime(updateTimeKey, new Date());
+//
+//            log.info("更新排行榜数据成功: activityId={}, goodsId={}, zsetKey={}", activityId, goodsId, zsetKey);
+//        }
 
         // 5. 组队回调处理 - 处理失败也会有定时任务补偿，通过这样的方式，可以减轻任务调度，提高时效性
         if (null != notifyTaskEntity) {

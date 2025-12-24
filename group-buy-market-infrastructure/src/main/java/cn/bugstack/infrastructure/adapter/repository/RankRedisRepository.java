@@ -6,6 +6,7 @@ import cn.bugstack.infrastructure.dcc.DCCService;
 import cn.bugstack.infrastructure.redis.IRedisService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import cn.bugstack.infrastructure.adapter.repository.lua.RankLuaExecutor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Repository;
@@ -13,6 +14,11 @@ import org.springframework.stereotype.Repository;
 import javax.annotation.Resource;
 import java.util.*;
 import java.util.function.Supplier;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.Set;
 
 /**
  * @author Fuzhengwei bugstack.cn @小傅哥
@@ -23,6 +29,9 @@ public class RankRedisRepository extends AbstractRepository implements IRankRedi
 
     @Resource
     private StringRedisTemplate redis;
+    @Resource
+    private RankLuaExecutor rankLuaExecutor;
+
     @Override
     public List<RankItemEntity> queryTopN(String zsetKey, int topN) {
         Set<ZSetOperations.TypedTuple<String>> tuples =
@@ -42,5 +51,16 @@ public class RankRedisRepository extends AbstractRepository implements IRankRedi
         if (v == null) return null;
         return new Date(Long.parseLong(v));
 
+    }
+
+    @Override
+    public boolean tryDedup(String dedupKey, Duration ttl) {
+        Boolean first = redis.opsForValue().setIfAbsent(dedupKey, "1", ttl);
+        return Boolean.TRUE.equals(first);
+    }
+
+    @Override
+    public void incrWithMeta(String zsetKey, String metaUpdateKey, String goodsId, long delta, long ttlSeconds, long updateTimeMillis) {
+        rankLuaExecutor.incrWithMeta(zsetKey, metaUpdateKey, goodsId, delta, ttlSeconds, updateTimeMillis);
     }
 }
