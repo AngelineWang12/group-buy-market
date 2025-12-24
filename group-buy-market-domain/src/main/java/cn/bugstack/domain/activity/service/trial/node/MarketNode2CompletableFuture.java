@@ -57,11 +57,6 @@ public class MarketNode2CompletableFuture extends MarketNode {
         }, threadPoolExecutor);
 
         // 等待所有异步任务完成并写入上下文
-        /**
-         * allOf() 等待两个查询任务完成
-         * 任务完成后执行 thenRun() 中的回调
-         * 外层 join() 阻塞等待回调执行完毕
-         */
         CompletableFuture.allOf(groupBuyActivityDiscountVOCompletableFuture, skuVOCompletableFuture)
                 .thenRun(() -> {
                     dynamicContext.setGroupBuyActivityDiscountVO(groupBuyActivityDiscountVOCompletableFuture.join());

@@ -25,9 +25,6 @@ public class SwitchNode extends AbstractGroupBuyMarketSupport<MarketProductEntit
     @Resource
     private MarketNode marketNode;
 
-    @Resource
-    private TagNode tagNode;
-
     @Override
     public TrialBalanceEntity doApply(MarketProductEntity requestParameter, DefaultActivityStrategyFactory.DynamicContext dynamicContext) throws Exception {
         log.info("拼团商品查询试算服务-SwitchNode userId:{} requestParameter:{}", requestParameter.getUserId(), JSON.toJSONString(requestParameter));
@@ -52,7 +49,7 @@ public class SwitchNode extends AbstractGroupBuyMarketSupport<MarketProductEntit
 
     @Override
     public StrategyHandler<MarketProductEntity, DefaultActivityStrategyFactory.DynamicContext, TrialBalanceEntity> get(MarketProductEntity requestParameter, DefaultActivityStrategyFactory.DynamicContext dynamicContext) throws Exception {
-        return tagNode;
+        return marketNode;
     }
 
 }
