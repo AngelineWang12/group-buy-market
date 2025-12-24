@@ -1,6 +1,7 @@
 package cn.bugstack.domain.trade.adapter.port;
 
 import cn.bugstack.domain.trade.model.entity.NotifyTaskEntity;
+import cn.bugstack.types.event.MarketRankEvent;
 
 /**
  * @author Fuzhengwei bugstack.cn @小傅哥
@@ -11,4 +12,5 @@ public interface ITradePort {
 
     String groupBuyNotify(NotifyTaskEntity notifyTask) throws Exception;
 
+    void sendRankEvent(MarketRankEvent rankEvent);
 }

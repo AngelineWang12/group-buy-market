@@ -9,7 +9,10 @@ import cn.bugstack.domain.trade.model.entity.*;
 import cn.bugstack.domain.trade.service.ITradeSettlementOrderService;
 import cn.bugstack.domain.trade.service.ITradeTaskService;
 import cn.bugstack.domain.trade.service.settlement.factory.TradeSettlementRuleFilterFactory;
+import cn.bugstack.types.enums.GroupBuyOrderEnumVO;
 import cn.bugstack.types.enums.NotifyTaskHTTPEnumVO;
+import cn.bugstack.types.event.MarketRankEvent;
+import cn.bugstack.types.event.MarketRankEventType;
 import cn.bugstack.types.exception.AppException;
 import cn.bugstack.wrench.design.framework.link.model2.chain.BusinessLinkedList;
 import com.alibaba.fastjson.JSON;
@@ -41,11 +44,6 @@ public class TradeSettlementOrderService implements ITradeSettlementOrderService
     @Resource
     private BusinessLinkedList<TradeSettlementRuleCommandEntity, TradeSettlementRuleFilterFactory.DynamicContext, TradeSettlementRuleFilterBackEntity> tradeSettlementRuleFilter;
 
-    // 新增排行榜相关依赖
-    @Resource
-    private IRankRedisRepository rankRedisRepository;
-    @Resource
-    private RankKeyFactory rankKeyFactory;
 
     @Override
     public TradePaySettlementEntity settlementMarketPayOrder(TradePaySuccessEntity tradePaySuccessEntity) throws Exception {
@@ -87,25 +85,10 @@ public class TradeSettlementOrderService implements ITradeSettlementOrderService
         // 4. 拼团交易结算
         NotifyTaskEntity notifyTaskEntity = repository.settlementMarketPayOrder(groupBuyTeamSettlementAggregate);
 
-//        // 5. 更新排行榜数据
-//        // 获取订单对应的商品ID（需要根据实际业务逻辑获取，这里假设从数据库中查询）
-//        String goodsId = repository.queryGoodsIdByTeamId(teamId);
-//
-//        if (goodsId != null) {
-//            // 生成排行榜键
-//            String timeWindow = "ACTIVITY"; // 活动维度的排行榜
-//            String windowKey = String.valueOf(activityId);
-//            String zsetKey = rankKeyFactory.saleKey(activityId, timeWindow, windowKey);
-//            String updateTimeKey = rankKeyFactory.saleUpdateTimeKey(activityId, timeWindow, windowKey);
-//
-//            // 更新排行榜分数
-//            rankRedisRepository.incrementRankScore(zsetKey, goodsId, 1.0);
-//
-//            // 更新排行榜更新时间
-//            rankRedisRepository.setUpdateTime(updateTimeKey, new Date());
-//
-//            log.info("更新排行榜数据成功: activityId={}, goodsId={}, zsetKey={}", activityId, goodsId, zsetKey);
-//        }
+        // 5. 发送拼团状态变化事件
+        sendGroupBuyStatusEvent(teamId, activityId, groupBuyTeamEntity.getStatus());
+
+        // 6. 组队回调处理 - 处理失败也会有定时任务补偿
 
         // 5. 组队回调处理 - 处理失败也会有定时任务补偿，通过这样的方式，可以减轻任务调度，提高时效性
         if (null != notifyTaskEntity) {
@@ -132,4 +115,34 @@ public class TradeSettlementOrderService implements ITradeSettlementOrderService
                 .build();
     }
 
+    /**
+     * 发送拼团状态变化事件
+     */
+    private void sendGroupBuyStatusEvent(String teamId, Long activityId, GroupBuyOrderEnumVO status) {
+        try {
+            // 获取商品ID（需要根据实际业务逻辑获取，这里假设从数据库中查询）
+            String goodsId = repository.queryGoodsIdByTeamId(teamId);
+
+            if (goodsId != null) {
+                MarketRankEvent rankEvent = new MarketRankEvent();
+                rankEvent.setEventId(UUID.randomUUID().toString());
+                rankEvent.setOrderId(teamId); // 使用teamId作为订单ID
+                rankEvent.setActivityId(activityId);
+                rankEvent.setGoodsId(goodsId);
+                rankEvent.setOccurTime(new Date());
+
+                // 根据拼团状态设置事件类型
+                if (GroupBuyOrderEnumVO.COMPLETE.equals(status)) {
+                    rankEvent.setEventType(MarketRankEventType.GROUP_BUY_COMPLETE);
+                } else if (GroupBuyOrderEnumVO.PROGRESS.equals(status)) {
+                    rankEvent.setEventType(MarketRankEventType.GROUP_BUY_PROGRESS);
+                }
+
+                // 通过消息队列发送事件
+                port.sendRankEvent(rankEvent);
+            }
+        } catch (Exception e) {
+            log.error("发送拼团状态变化事件失败", e);
+        }
+    }
 }

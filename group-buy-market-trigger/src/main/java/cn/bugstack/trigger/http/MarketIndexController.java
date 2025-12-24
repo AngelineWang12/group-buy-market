@@ -35,7 +35,7 @@ public class MarketIndexController implements IMarketIndexService {
 
     @Resource
     private IIndexGroupBuyMarketService indexGroupBuyMarketService;
-
+    @Resource
     private IRankGroupBuyMarketService rankGroupBuyMarketService;
     @RateLimiterAccessInterceptor(key = "userId", fallbackMethod = "queryGroupBuyMarketConfigFallBack", permitsPerSecond = 1.0d, blacklistCount = 1)
     @RequestMapping(value = "query_group_buy_market_config", method = RequestMethod.POST)

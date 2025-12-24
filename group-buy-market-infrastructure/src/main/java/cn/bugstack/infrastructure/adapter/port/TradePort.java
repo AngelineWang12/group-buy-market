@@ -7,6 +7,9 @@ import cn.bugstack.infrastructure.event.EventPublisher;
 import cn.bugstack.infrastructure.gateway.GroupBuyNotifyService;
 import cn.bugstack.infrastructure.redis.IRedisService;
 import cn.bugstack.types.enums.NotifyTaskHTTPEnumVO;
+import cn.bugstack.types.event.MarketRankEvent;
+import com.alibaba.fastjson.JSON;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RLock;
 import org.springframework.stereotype.Service;
@@ -19,6 +22,7 @@ import java.util.concurrent.TimeUnit;
  * @description 交易接口服务
  * @create 2025-01-31 13:34
  */
+@Slf4j
 @Service
 public class TradePort implements ITradePort {
 
@@ -60,6 +64,19 @@ public class TradePort implements ITradePort {
         } catch (Exception e) {
             Thread.currentThread().interrupt();
             return NotifyTaskHTTPEnumVO.NULL.getCode();
+        }
+    }
+
+    @Override
+    public void sendRankEvent(MarketRankEvent rankEvent) {
+        try {
+            String message = JSON.toJSONString(rankEvent);
+            publisher.publish("market.rank", message);
+            log.info("排行榜事件发送成功, eventId:{}, goodsId:{}, eventType:{}",
+                    rankEvent.getEventId(), rankEvent.getGoodsId(), rankEvent.getEventType());
+        } catch (Exception e) {
+            log.error("排行榜事件发送失败, rankEvent:{}", rankEvent, e);
+            throw e;
         }
     }
 

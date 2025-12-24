@@ -1,5 +1,6 @@
 package cn.bugstack.infrastructure.adapter.repository;
 
+import cn.bugstack.domain.trade.adapter.port.ITradePort;
 import cn.bugstack.domain.trade.adapter.repository.ITradeRepository;
 import cn.bugstack.domain.trade.model.aggregate.GroupBuyOrderAggregate;
 import cn.bugstack.domain.trade.model.aggregate.GroupBuyRefundAggregate;
@@ -20,6 +21,8 @@ import cn.bugstack.types.common.Constants;
 import cn.bugstack.types.enums.ActivityStatusEnumVO;
 import cn.bugstack.types.enums.GroupBuyOrderEnumVO;
 import cn.bugstack.types.enums.ResponseCode;
+import cn.bugstack.types.event.MarketRankEvent;
+import cn.bugstack.types.event.MarketRankEventType;
 import cn.bugstack.types.exception.AppException;
 import com.alibaba.fastjson2.JSON;
 import lombok.extern.slf4j.Slf4j;
@@ -56,6 +59,8 @@ public class TradeRepository implements ITradeRepository {
     private INotifyTaskDao notifyTaskDao;
     @Resource
     private DCCService dccService;
+    @Resource
+    private ITradePort port;
 
     @Value("${spring.rabbitmq.config.producer.topic_team_success.routing_key}")
     private String topic_team_success;
@@ -159,6 +164,9 @@ public class TradeRepository implements ITradeRepository {
         } catch (DuplicateKeyException e) {
             throw new AppException(ResponseCode.INDEX_EXCEPTION);
         }
+
+        // 发送拼团进度事件
+        sendGroupBuyProgressEvent(orderId, payActivityEntity.getActivityId(), payDiscountEntity.getGoodsId());
 
         return MarketPayOrderEntity.builder()
                 .orderId(orderId)
@@ -477,4 +485,32 @@ public class TradeRepository implements ITradeRepository {
                 .build();
     }
 
+    @Override
+    public String queryGoodsIdByTeamId(String teamId) {
+        GroupBuyOrderList groupBuyOrderList  = groupBuyOrderListDao.selectByTeamId(teamId);
+        if (null == groupBuyOrderList) {
+            log.error("查询组队记录失败 teamId {}", teamId);
+            throw new AppException(ResponseCode.E0201);
+        }
+        return groupBuyOrderList.getGoodsId();
+    }
+
+    // 添加sendGroupBuyProgressEvent方法
+    private void sendGroupBuyProgressEvent(String orderId, Long activityId, String goodsId) {
+        log.info("MQ发送拼团中事件 orderId {} activityId {} goodsId {}", orderId, activityId, goodsId);
+        MarketRankEvent rankEvent = new MarketRankEvent();
+        rankEvent.setEventId(UUID.randomUUID().toString());
+        rankEvent.setOrderId(orderId);
+        rankEvent.setActivityId(activityId);
+        rankEvent.setGoodsId(goodsId);
+        rankEvent.setOccurTime(new Date());
+        rankEvent.setEventType(MarketRankEventType.UNPAID);
+
+        // 通过消息队列发送事件
+        try {
+            port.sendRankEvent(rankEvent);
+        } catch (Exception e) {
+            log.error("发送拼团中事件失败", e);
+        }
+    }
 }

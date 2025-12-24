@@ -1,16 +1,21 @@
 package cn.bugstack.domain.trade.service.lock;
 
+import cn.bugstack.domain.trade.adapter.port.ITradePort;
 import cn.bugstack.domain.trade.adapter.repository.ITradeRepository;
 import cn.bugstack.domain.trade.model.aggregate.GroupBuyOrderAggregate;
 import cn.bugstack.domain.trade.model.entity.*;
 import cn.bugstack.domain.trade.model.valobj.GroupBuyProgressVO;
 import cn.bugstack.domain.trade.service.ITradeLockOrderService;
 import cn.bugstack.domain.trade.service.lock.factory.TradeLockRuleFilterFactory;
+import cn.bugstack.types.event.MarketRankEvent;
+import cn.bugstack.types.event.MarketRankEventType;
 import cn.bugstack.wrench.design.framework.link.model2.chain.BusinessLinkedList;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
+import java.util.Date;
+import java.util.UUID;
 
 /**
  * @author Fuzhengwei bugstack.cn @小傅哥
@@ -23,6 +28,7 @@ public class TradeLockOrderService implements ITradeLockOrderService {
 
     @Resource
     private ITradeRepository repository;
+
     @Resource
     private BusinessLinkedList<TradeLockRuleCommandEntity, TradeLockRuleFilterFactory.DynamicContext, TradeLockRuleFilterBackEntity> tradeRuleFilter;
 
@@ -71,5 +77,6 @@ public class TradeLockOrderService implements ITradeLockOrderService {
         }
 
     }
+
 
 }

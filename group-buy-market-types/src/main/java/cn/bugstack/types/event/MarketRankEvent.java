@@ -1,5 +1,6 @@
 package cn.bugstack.types.event;
 
+import cn.bugstack.types.enums.GroupBuyOrderEnumVO;
 import lombok.Data;
 
 import java.util.Date;
@@ -16,4 +17,8 @@ public class MarketRankEvent {
     private Integer quantity;
     private Date occurTime;
     private MarketRankEventType eventType;
+    /**
+     * 订单状态：拼单中/完成/失败
+     */
+    private GroupBuyOrderEnumVO orderStatus;
 }

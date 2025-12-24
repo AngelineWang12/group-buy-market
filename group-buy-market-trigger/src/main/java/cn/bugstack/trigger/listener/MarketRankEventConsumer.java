@@ -2,6 +2,7 @@ package cn.bugstack.trigger.listener;
 
 import cn.bugstack.domain.activity.adapter.repository.IRankRedisRepository;
 import cn.bugstack.domain.activity.service.trial.factory.RankKeyFactory;
+import cn.bugstack.types.enums.GroupBuyOrderEnumVO;
 import cn.bugstack.types.event.MarketRankEvent;
 import cn.bugstack.types.event.MarketRankEventType;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,6 +22,8 @@ public class MarketRankEventConsumer {
 
     private static final String TIME_WINDOW_ACTIVITY = "ACTIVITY";
     private static final long DEFAULT_TTL_SECONDS = 30L * 24 * 3600;
+    private static final long COMPLETE_WEIGHT = 10L;
+    private static final long PROGRESS_WEIGHT = 3L;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -43,10 +46,9 @@ public class MarketRankEventConsumer {
                 return;
             }
 
-            long delta = event.getQuantity() == null ? 0L : event.getQuantity();
-            if (event.getEventType() == MarketRankEventType.REFUND_SUCCESS
-                    || event.getEventType() == MarketRankEventType.ORDER_CANCEL) {
-                delta = -delta;
+            long delta = calculateWeightedDelta(event);
+            if (delta == 0L) {
+                return;
             }
 
             String zsetKey = rankKeyFactory.saleKey(event.getActivityId(), TIME_WINDOW_ACTIVITY, String.valueOf(event.getActivityId()));
@@ -59,5 +61,25 @@ public class MarketRankEventConsumer {
         } catch (Exception e) {
             log.error("排行榜事件消费异常, message: {}", message, e);
         }
+    }
+
+    private long calculateWeightedDelta(MarketRankEvent event) {
+        long qty = event.getQuantity() == null ? 1L : event.getQuantity();
+        GroupBuyOrderEnumVO status = event.getOrderStatus();
+        long weight = PROGRESS_WEIGHT;
+        if (status == GroupBuyOrderEnumVO.COMPLETE) {
+            weight = COMPLETE_WEIGHT;
+        } else if (status == GroupBuyOrderEnumVO.PROGRESS) {
+            weight = PROGRESS_WEIGHT;
+        } else if (status == GroupBuyOrderEnumVO.FAIL) {
+            weight = 0L;
+        }
+
+        long delta = qty * weight;
+        if (event.getEventType() == MarketRankEventType.REFUND_SUCCESS
+                || event.getEventType() == MarketRankEventType.ORDER_CANCEL) {
+            delta = -delta;
+        }
+        return delta;
     }
 }

@@ -6,6 +6,7 @@ import cn.bugstack.domain.activity.adapter.repository.IActivityRepository;
 import cn.bugstack.domain.activity.adapter.repository.IRankRedisRepository;
 import cn.bugstack.domain.activity.model.entity.RankItemEntity;
 import cn.bugstack.domain.activity.service.trial.factory.RankKeyFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import javax.annotation.Resource;
 import java.util.ArrayList;
@@ -18,6 +19,7 @@ import java.util.stream.Collectors;
  * @description 首页营销服务
  * @create 2024-12-14 14:33
  */
+@Slf4j
 @Service
 public class RankGroupBuyMarketServiceImpl implements IRankGroupBuyMarketService {
 
