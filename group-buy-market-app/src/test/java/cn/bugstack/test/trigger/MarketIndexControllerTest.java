@@ -32,7 +32,7 @@ public class MarketIndexControllerTest {
         requestDTO.setSource("s01");
         requestDTO.setChannel("c01");
         requestDTO.setUserId("xfg01");
-        requestDTO.setGoodsId("9890001");
+        requestDTO.setGoodsId("989001");
 
         Response<GoodsMarketResponseDTO> response = marketIndexController.queryGroupBuyMarketConfig(requestDTO);
 
