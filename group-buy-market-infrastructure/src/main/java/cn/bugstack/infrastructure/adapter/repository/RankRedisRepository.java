@@ -58,7 +58,7 @@ public class RankRedisRepository extends AbstractRepository implements IRankRedi
             if (entries != null && !entries.isEmpty()) {
                 for (ScoredEntry<String> entry : entries) {
                     result.add(RankItemEntity.builder()
-                            .member(entry.getValue()) // 商品ID
+                            .member(String.valueOf(entry.getValue())) // 商品ID
                             .score(entry.getScore() == null ? 0L : entry.getScore().longValue())  // 销量
                             .build());
                 }
@@ -75,9 +75,11 @@ public class RankRedisRepository extends AbstractRepository implements IRankRedi
     public Date getUpdateTime(String key) {
         try {
             // 使用 RBucket 获取普通字符串/对象
-            RBucket<Date> bucket = redissonClient.getBucket(key);
+            RBucket<String> bucket = redissonClient.getBucket(key, StringCodec.INSTANCE);
             if (bucket.isExists()) {
-                return bucket.get();
+                String val = bucket.get();
+                // 此时 val 是 "170345..." 字符串
+                return new Date(Long.parseLong(val));
             }
         } catch (Exception e) {
             log.error("获取排行榜更新时间异常 key:{}", key, e);
