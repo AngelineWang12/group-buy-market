@@ -8,7 +8,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.util.Map;
 
-@Service("MJ")
+@Service("MJDiscountNode")
 public class MJDiscountNode extends AbstractDiscountNode {
 
     @Override

@@ -9,6 +9,7 @@ import cn.bugstack.infrastructure.dcc.DCCService;
 import cn.bugstack.infrastructure.redis.IRedisService;
 import org.redisson.api.RBitSet;
 import org.springframework.stereotype.Repository;
+import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import java.util.*;

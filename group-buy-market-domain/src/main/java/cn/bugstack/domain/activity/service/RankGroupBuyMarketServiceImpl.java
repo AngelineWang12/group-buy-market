@@ -4,15 +4,14 @@ import cn.bugstack.api.dto.GoodsMarketRankListResponseDTO;
 import cn.bugstack.api.dto.GoodsMarketRankResponseDTO;
 import cn.bugstack.domain.activity.adapter.repository.IActivityRepository;
 import cn.bugstack.domain.activity.adapter.repository.IRankRedisRepository;
-import cn.bugstack.domain.activity.model.entity.MarketProductEntity;
 import cn.bugstack.domain.activity.model.entity.RankItemEntity;
-import cn.bugstack.domain.activity.model.entity.TrialBalanceEntity;
 import cn.bugstack.domain.activity.service.trial.factory.RankKeyFactory;
 import org.springframework.stereotype.Service;
 import javax.annotation.Resource;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * @author Fuzhengwei bugstack.cn @小傅哥
@@ -28,8 +27,6 @@ public class RankGroupBuyMarketServiceImpl implements IRankGroupBuyMarketService
     private IRankRedisRepository rankRedisRepository;
     @Resource
     private IActivityRepository activityRepository;
-    @Resource
-    private IIndexGroupBuyMarketService indexGroupBuyMarketService;
 
     @Override
     public GoodsMarketRankListResponseDTO queryTopNByActivityId(Long activityId, String timeWindow, String windowKey) throws Exception {
@@ -41,36 +38,25 @@ public class RankGroupBuyMarketServiceImpl implements IRankGroupBuyMarketService
         // 2) 取更新时间
         Date updateTime = rankRedisRepository.getUpdateTime(zsetKey + ":meta:updateTime");
 
-        // 3) 组装排行榜数据
+        // 3) 组装排行榜数据，只包含基本信息，价格信息将在Controller中通过试算获取
         List<GoodsMarketRankResponseDTO> rankList = new ArrayList<>();
         for (int i = 0; i < items.size(); i++) {
-            RankItemEntity it = items.get(i);
-            String goodsId = it.getMember();
+            RankItemEntity item = items.get(i);
+            String goodsId = item.getMember(); // RankItemEntity使用member字段存储goodsId
 
-            // 通过试算获取商品价格信息
-            TrialBalanceEntity trialBalanceEntity = indexGroupBuyMarketService.indexMarketTrial(MarketProductEntity.builder()
-                    .activityId(activityId)
-                    .userId("system") // 使用默认用户ID，因为排行榜查询没有具体用户
-                    .goodsId(goodsId)
-                    .source("system") // 使用默认来源
-                    .channel("system") // 使用默认渠道
-                    .build());
-
-            // 构建商品信息
-            GoodsMarketRankResponseDTO.Goods goods = GoodsMarketRankResponseDTO.Goods.builder()
-                    .goodsId(goodsId)
-                    .originalPrice(trialBalanceEntity.getOriginalPrice())
-                    .deductionPrice(trialBalanceEntity.getDeductionPrice())
-                    .payPrice(trialBalanceEntity.getPayPrice())
+            // 构建排行榜响应对象，注意GoodsMarketRankResponseDTO的结构
+            GoodsMarketRankResponseDTO rankItem = GoodsMarketRankResponseDTO.builder()
+                    .rankNo(i + 1)
+                    .score(item.getScore()) // GoodsMarketRankResponseDTO使用score字段而不是saleCount
                     .build();
 
-            // 组装排行榜响应对象
-            rankList.add(GoodsMarketRankResponseDTO.builder()
-                    .rankNo(i + 1)
+            // 构建并设置商品信息，包括goodsId
+            GoodsMarketRankResponseDTO.Goods goods = GoodsMarketRankResponseDTO.Goods.builder()
                     .goodsId(goodsId)
-                    .saleCount(it.getScore())
-                    .goods(goods)
-                    .build());
+                    .build();
+            rankItem.setGoods(goods);
+
+            rankList.add(rankItem);
         }
 
         GoodsMarketRankListResponseDTO resp = GoodsMarketRankListResponseDTO.builder()

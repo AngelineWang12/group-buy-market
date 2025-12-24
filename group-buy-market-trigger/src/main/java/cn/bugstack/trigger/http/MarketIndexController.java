@@ -128,36 +128,65 @@ public class MarketIndexController implements IMarketIndexService {
     @RequestMapping(value = "query_group_buy_market_rank_list", method = RequestMethod.POST)
     @Override
     public Response<GoodsMarketRankListResponseDTO> queryGroupBuyMarketRankList(GoodsMarketRankRequestDTO req) throws Exception {
-        Long activityId = req.getActivityId();
-        String timeWindow = (req.getTimeWindow() == null) ? "ACTIVITY" : req.getTimeWindow();
-        String windowKey = (req.getWindowKey() == null || req.getWindowKey().isEmpty())
-                ? String.valueOf(activityId)
-                : req.getWindowKey();
+        try {
+            log.info("查询拼团营销排行榜开始:{} activityId:{}", req.getUserId(), req.getActivityId());
 
-        // 1) Redis 取 TopN
-        GoodsMarketRankListResponseDTO resp =rankGroupBuyMarketService.queryTopNByActivityId(activityId, timeWindow, windowKey);
+            if (StringUtils.isBlank(req.getUserId()) || StringUtils.isBlank(req.getSource()) || StringUtils.isBlank(req.getChannel()) || req.getActivityId() == null) {
+                return Response.<GoodsMarketRankListResponseDTO>builder()
+                        .code(ResponseCode.ILLEGAL_PARAMETER.getCode())
+                        .info(ResponseCode.ILLEGAL_PARAMETER.getInfo())
+                        .build();
+            }
 
-        // 1. 营销优惠试算
-        TrialBalanceEntity trialBalanceEntity = indexGroupBuyMarketService.indexMarketTrial(MarketProductEntity.builder()
-                .userId(req.getUserId())
-                .source(req.getSource())
-                .channel(req.getChannel())
-                .goodsId(requestDTO.getGoodsId())
-                .build());
+            Long activityId = req.getActivityId();
+            String timeWindow = (req.getTimeWindow() == null) ? "ACTIVITY" : req.getTimeWindow();
+            String windowKey = (req.getWindowKey() == null || req.getWindowKey().isEmpty())
+                    ? String.valueOf(activityId)
+                    : req.getWindowKey();
 
-        return Response.<GoodsMarketRankListResponseDTO>builder()
-                .code(ResponseCode.SUCCESS.getCode())
-                .info(ResponseCode.SUCCESS.getInfo())
-                .data(resp)
-                .build();
-    }
+            // 1) Redis 取 TopN 基本数据
+            GoodsMarketRankListResponseDTO resp = rankGroupBuyMarketService.queryTopNByActivityId(activityId, timeWindow, windowKey);
 
-    public Response<GoodsMarketResponseDTO> queryGroupBuyMarketConfigFallBack(@RequestBody GoodsMarketRequestDTO requestDTO) {
-        log.error("查询拼团营销配置限流:{}", requestDTO.getUserId());
-        return Response.<GoodsMarketResponseDTO>builder()
-                .code(ResponseCode.RATE_LIMITER.getCode())
-                .info(ResponseCode.RATE_LIMITER.getInfo())
-                .build();
+            // 2) 为每个商品调用试算服务，添加价格信息
+            List<GoodsMarketRankResponseDTO> rankList = resp.getRankList();
+            for (GoodsMarketRankResponseDTO rankItem : rankList) {
+                String goodsId = rankItem.getGoods().getGoodsId();
+
+                // 通过试算获取商品价格信息
+                TrialBalanceEntity trialBalanceEntity = indexGroupBuyMarketService.indexMarketTrial(MarketProductEntity.builder()
+                        .activityId(activityId)
+                        .userId(req.getUserId()) // 使用真实用户ID
+                        .goodsId(goodsId)
+                        .source(req.getSource()) // 使用真实来源
+                        .channel(req.getChannel()) // 使用真实渠道
+                        .build());
+
+                // 构建商品信息
+                GoodsMarketRankResponseDTO.Goods goods = GoodsMarketRankResponseDTO.Goods.builder()
+                        .goodsId(goodsId)
+                        .originalPrice(trialBalanceEntity.getOriginalPrice())
+                        .deductionPrice(trialBalanceEntity.getDeductionPrice())
+                        .payPrice(trialBalanceEntity.getPayPrice())
+                        .build();
+
+                // 设置商品信息
+                rankItem.setGoods(goods);
+            }
+
+            log.info("查询拼团营销排行榜完成:{} activityId:{}", req.getUserId(), req.getActivityId());
+
+            return Response.<GoodsMarketRankListResponseDTO>builder()
+                    .code(ResponseCode.SUCCESS.getCode())
+                    .info(ResponseCode.SUCCESS.getInfo())
+                    .data(resp)
+                    .build();
+        } catch (Exception e) {
+            log.error("查询拼团营销排行榜失败:{} activityId:{}", req.getUserId(), req.getActivityId(), e);
+            return Response.<GoodsMarketRankListResponseDTO>builder()
+                    .code(ResponseCode.UN_ERROR.getCode())
+                    .info(ResponseCode.UN_ERROR.getInfo())
+                    .build();
+        }
     }
 
 }

@@ -93,6 +93,7 @@ public class GroupBuyActivityDiscountVO {
      */
     private String tagScope;
 
+    private GroupBuyDiscount groupBuyDiscount;
     /**
      * 可见限制
      * 只要存在这样一个值，那么首次获得的默认值就是 false
