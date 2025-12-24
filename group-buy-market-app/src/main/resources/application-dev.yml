@@ -67,6 +67,9 @@ spring:
           routing_key: topic.team_refund
           # 消费队列
           queue: group_buy_market_queue_2_topic_team_refund
+        topic_market_rank:
+          routing_key: topic.market_rank
+          queue: group_buy_market_queue_2_topic_market_rank
 
 # MyBatis 配置【如需使用记得打开】
 mybatis:

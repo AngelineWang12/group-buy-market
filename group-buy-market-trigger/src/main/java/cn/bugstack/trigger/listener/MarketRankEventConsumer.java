@@ -7,6 +7,11 @@ import cn.bugstack.types.event.MarketRankEvent;
 import cn.bugstack.types.event.MarketRankEventType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.AmqpRejectAndDontRequeueException;
+import org.springframework.amqp.core.ExchangeTypes;
+import org.springframework.amqp.rabbit.annotation.Exchange;
+import org.springframework.amqp.rabbit.annotation.Queue;
+import org.springframework.amqp.rabbit.annotation.QueueBinding;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 
@@ -32,7 +37,12 @@ public class MarketRankEventConsumer {
     @Resource
     private IRankRedisRepository rankRedisRepository;
 
-    @RabbitListener(queues = "market.rank.queue")
+    @RabbitListener(
+            bindings = @QueueBinding(
+                    value = @Queue(value = "${spring.rabbitmq.config.producer.topic_market_rank.queue}"),
+                    exchange = @Exchange(value = "${spring.rabbitmq.config.producer.exchange}", type = ExchangeTypes.TOPIC),
+                    key = "${spring.rabbitmq.config.producer.topic_market_rank.routing_key}")
+    )
     public void onMessage(String message) {
         try {
             MarketRankEvent event = objectMapper.readValue(message, MarketRankEvent.class);
@@ -60,6 +70,7 @@ public class MarketRankEventConsumer {
             log.info("排行榜事件处理完成 eventId:{} goodsId:{} delta:{} key:{}", event.getEventId(), event.getGoodsId(), delta, zsetKey);
         } catch (Exception e) {
             log.error("排行榜事件消费异常, message: {}", message, e);
+            throw new AmqpRejectAndDontRequeueException(e);
         }
     }
 

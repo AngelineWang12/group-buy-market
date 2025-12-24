@@ -12,6 +12,7 @@ import com.alibaba.fastjson.JSON;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RLock;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -33,6 +34,8 @@ public class TradePort implements ITradePort {
     @Resource
     private EventPublisher publisher;
 
+    @Value("${spring.rabbitmq.config.producer.topic_market_rank.routing_key}")
+    private String routingKey;
     @Override
     public String groupBuyNotify(NotifyTaskEntity notifyTask) throws Exception {
         RLock lock = redisService.getLock(notifyTask.lockKey());
@@ -71,7 +74,7 @@ public class TradePort implements ITradePort {
     public void sendRankEvent(MarketRankEvent rankEvent) {
         try {
             String message = JSON.toJSONString(rankEvent);
-            publisher.publish("market.rank", message);
+            publisher.publish(routingKey, message);
             log.info("排行榜事件发送成功, eventId:{}, goodsId:{}, eventType:{}",
                     rankEvent.getEventId(), rankEvent.getGoodsId(), rankEvent.getEventType());
         } catch (Exception e) {

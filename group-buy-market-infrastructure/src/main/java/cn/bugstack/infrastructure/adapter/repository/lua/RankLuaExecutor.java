@@ -1,6 +1,7 @@
 package cn.bugstack.infrastructure.adapter.repository.lua;
 
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
 
@@ -25,6 +26,9 @@ public class RankLuaExecutor {
     @Resource
     private RedisTemplate<String, String> redisTemplate;
 
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
+
     private DefaultRedisScript<Long> incrWithMetaScript;
 
     @PostConstruct
@@ -36,6 +40,6 @@ public class RankLuaExecutor {
 
     public void incrWithMeta(String zsetKey, String metaUpdateKey, String goodsId, long delta, long ttlSeconds, long updateTimeMillis) {
         List<String> keys = Arrays.asList(zsetKey, metaUpdateKey);
-        redisTemplate.execute(incrWithMetaScript, keys, goodsId, String.valueOf(delta), String.valueOf(ttlSeconds), String.valueOf(updateTimeMillis));
+        stringRedisTemplate.execute(incrWithMetaScript, keys, goodsId, String.valueOf(delta), String.valueOf(ttlSeconds), String.valueOf(updateTimeMillis));
     }
 }
