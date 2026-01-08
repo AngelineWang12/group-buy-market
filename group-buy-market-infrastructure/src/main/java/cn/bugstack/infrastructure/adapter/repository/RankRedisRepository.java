@@ -2,8 +2,6 @@ package cn.bugstack.infrastructure.adapter.repository;
 
 import cn.bugstack.domain.activity.adapter.repository.IRankRedisRepository;
 import cn.bugstack.domain.activity.model.entity.RankItemEntity;
-import cn.bugstack.infrastructure.dcc.DCCService;
-import cn.bugstack.infrastructure.redis.IRedisService;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RBucket;
 import org.redisson.api.RScoredSortedSet;
@@ -11,21 +9,17 @@ import org.redisson.api.RScript;
 import org.redisson.api.RedissonClient;
 import org.redisson.client.codec.StringCodec;
 import org.redisson.client.protocol.ScoredEntry;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import cn.bugstack.infrastructure.adapter.repository.lua.RankLuaExecutor;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Repository;
 
 import javax.annotation.Resource;
-import java.util.*;
-import java.util.function.Supplier;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Date;
 import java.util.List;
-import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 /**
  * @author Fuzhengwei bugstack.cn @小傅哥
@@ -37,22 +31,33 @@ public class RankRedisRepository extends AbstractRepository implements IRankRedi
 
     @Resource
     private StringRedisTemplate redis;
-    @Resource
-    private RankLuaExecutor rankLuaExecutor;
 
     @Resource
     private RedissonClient redissonClient;
 
     @Override
     public List<RankItemEntity> queryTopN(String key, int topN) {
+        if (topN <= 0) {
+            log.warn("查询排行榜TopN参数无效 key:{} topN:{}", key, topN);
+            return new ArrayList<>();
+        }
+        return queryByRange(key, 0, topN - 1);
+    }
+
+    @Override
+    public List<RankItemEntity> queryByRange(String key, int start, int end) {
         List<RankItemEntity> result = new ArrayList<>();
         try {
-            // 1. 获取 ZSet (对应 Redis 命令: ZREVRANGE key 0 topN-1 WITHSCORES)
+            if (start < 0 || end < start) {
+                log.warn("查询排行榜范围参数无效 key:{} start:{} end:{}", key, start, end);
+                return result;
+            }
+
+            // 1. 获取 ZSet (对应 Redis 命令: ZREVRANGE key start end WITHSCORES)
             RScoredSortedSet<String> scoredSortedSet = redissonClient.getScoredSortedSet(key);
 
-            // 2. 获取前 N 名 (0 到 topN-1)
-            // entryRangeReversed 是倒序取值，正好符合排行榜逻辑 (销量高的在前)
-            Collection<ScoredEntry<String>> entries = scoredSortedSet.entryRangeReversed(0, topN - 1);
+            // 2. 获取指定排名范围的数据（倒序，销量高的在前）
+            Collection<ScoredEntry<String>> entries = scoredSortedSet.entryRangeReversed(start, end);
 
             // 3. 转换数据
             if (entries != null && !entries.isEmpty()) {
@@ -64,11 +69,70 @@ public class RankRedisRepository extends AbstractRepository implements IRankRedi
                 }
             }
         } catch (Exception e) {
-            log.error("查询Redis排行榜异常 key:{}", key, e);
+            log.error("查询Redis排行榜异常 key:{} start:{} end:{}", key, start, end, e);
             // 异常时返回空列表，作为降级处理，防止整个接口崩掉
             return new ArrayList<>();
         }
         return result;
+    }
+
+    @Override
+    public RankItemEntity queryRankByGoodsId(String zsetKey, String goodsId) {
+        try {
+            RScoredSortedSet<String> scoredSortedSet = redissonClient.getScoredSortedSet(zsetKey);
+            
+            // 获取商品分数
+            Double score = scoredSortedSet.getScore(goodsId);
+            if (score == null) {
+                log.debug("商品不在排行榜中 zsetKey:{} goodsId:{}", zsetKey, goodsId);
+                return null;
+            }
+
+            // 获取正序排名（从0开始，分数低的排名靠前）
+            Integer rank = scoredSortedSet.rank(goodsId);
+            if (rank == null) {
+                // 如果rank为null，说明商品不在ZSet中（虽然score不为null，但可能数据不一致）
+                return null;
+            }
+
+            // 返回商品排名信息（包含商品ID和分数）
+            // 注意：这里不返回排名序号，因为排名需要根据总数量和正序排名计算
+            // 如果需要排名序号，可以在调用方根据返回的数据和总数量计算
+            
+            return RankItemEntity.builder()
+                    .member(goodsId)
+                    .score(score.longValue())
+                    .build();
+        } catch (Exception e) {
+            log.error("查询商品排名异常 zsetKey:{} goodsId:{}", zsetKey, goodsId, e);
+            return null;
+        }
+    }
+
+    @Override
+    public long[] getRankStatistics(String zsetKey) {
+        try {
+            RScoredSortedSet<String> scoredSortedSet = redissonClient.getScoredSortedSet(zsetKey);
+            
+            // 总数
+            long totalCount = scoredSortedSet.size();
+            
+            // 总分数（所有商品的分数之和）
+            long totalScore = 0L;
+            Collection<ScoredEntry<String>> allEntries = scoredSortedSet.entryRange(0, -1);
+            if (allEntries != null) {
+                for (ScoredEntry<String> entry : allEntries) {
+                    if (entry.getScore() != null) {
+                        totalScore += entry.getScore().longValue();
+                    }
+                }
+            }
+
+            return new long[]{totalCount, totalScore};
+        } catch (Exception e) {
+            log.error("获取排行榜统计信息异常 zsetKey:{}", zsetKey, e);
+            return new long[]{0L, 0L};
+        }
     }
 
     @Override
@@ -88,37 +152,6 @@ public class RankRedisRepository extends AbstractRepository implements IRankRedi
         return new Date();
     }
 
-//    @Override
-//    public List<RankItemEntity> queryTopN(String zsetKey, int topN) {
-//        Set<ZSetOperations.TypedTuple<String>> tuples =
-//                redis.opsForZSet().reverseRangeWithScores(zsetKey, 0, topN - 1);
-//        List<RankItemEntity> list = new ArrayList<>();
-//        if (tuples == null) return list;
-//
-//        for (ZSetOperations.TypedTuple<String> t : tuples) {
-//            list.add(new RankItemEntity(t.getValue(), t.getScore() == null ? 0L : t.getScore().longValue()));
-//        }
-//        return list;
-//    }
-
-//    @Override
-//    public Date getUpdateTime(String s) {
-//        String v = redis.opsForValue().get(s);
-//        if (v == null) return null;
-//        return new Date(Long.parseLong(v));
-//
-//    }
-
-/*    @Override
-    public boolean tryDedup(String dedupKey, Duration ttl) {
-        Boolean first = redis.opsForValue().setIfAbsent(dedupKey, "1", ttl);
-        return Boolean.TRUE.equals(first);
-    }
-
-    @Override
-    public void incrWithMeta(String zsetKey, String metaUpdateKey, String goodsId, long delta, long ttlSeconds, long updateTimeMillis) {
-        rankLuaExecutor.incrWithMeta(zsetKey, metaUpdateKey, goodsId, delta, ttlSeconds, updateTimeMillis);
-    }*/
     /**
      * 修改 1: 去重/锁 (对应原 setIfAbsent)
      * 使用 Redisson 的 Bucket (等同于 Redis String) 的 trySet 方法
@@ -128,8 +161,8 @@ public class RankRedisRepository extends AbstractRepository implements IRankRedi
         // 获取 Bucket 对象
         RBucket<String> bucket = redissonClient.getBucket(dedupKey);
         // trySet = SETNX (Set If Not Exist)
-        // 注意：Redisson 接收的时间单位
-        return bucket.trySet("1", ttl.toMillis(), java.util.concurrent.TimeUnit.MILLISECONDS);
+        // 将Duration转换为毫秒，使用TimeUnit.MILLISECONDS
+        return bucket.trySet("1", ttl.toMillis(), TimeUnit.MILLISECONDS);
     }
 
     /**

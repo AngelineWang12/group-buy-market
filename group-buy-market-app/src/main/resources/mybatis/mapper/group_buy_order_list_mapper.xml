@@ -92,7 +92,7 @@
         where activity_id = #{activityId} and status in (0, 1)
         group by team_id
     </select>
-    <select id="selectByTeamId" resultType="cn.bugstack.infrastructure.dao.po.GroupBuyOrderList">
+    <select id="selectByTeamId" resultType="cn.bugstack.infrastructure.dao.po.GroupBuyOrderList" resultMap="dataMap">
         select * from group_buy_order_list where team_id = #{teamId}
         order by id limit 1
     </select>

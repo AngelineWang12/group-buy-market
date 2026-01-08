@@ -22,4 +22,16 @@ public class GoodsMarketRankRequestDTO {
     private String timeWindow;
 
     private String windowKey;
+    
+    // 查询TopN数量（可选，默认10）
+    private Integer topN;
+    
+    // 分页查询：页码（从1开始）
+    private Integer pageNum;
+    
+    // 分页查询：每页大小
+    private Integer pageSize;
+    
+    // 查询指定商品的排名（可选）
+    private String goodsId;
 }

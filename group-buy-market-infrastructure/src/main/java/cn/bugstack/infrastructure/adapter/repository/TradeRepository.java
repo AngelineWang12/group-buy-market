@@ -17,6 +17,7 @@ import cn.bugstack.infrastructure.dao.po.GroupBuyOrderList;
 import cn.bugstack.infrastructure.dao.po.NotifyTask;
 import cn.bugstack.infrastructure.dcc.DCCService;
 import cn.bugstack.infrastructure.redis.IRedisService;
+import cn.bugstack.infrastructure.adapter.repository.lua.StockOccupyLuaExecutor;
 import cn.bugstack.types.common.Constants;
 import cn.bugstack.types.enums.ActivityStatusEnumVO;
 import cn.bugstack.types.enums.GroupBuyOrderEnumVO;
@@ -34,11 +35,7 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
-import java.time.Duration;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 
 /**
  * @author Fuzhengwei bugstack.cn @小傅哥
@@ -70,6 +67,8 @@ public class TradeRepository implements ITradeRepository {
 
     @Resource
     private IRedisService redisService;
+    @Resource
+    private StockOccupyLuaExecutor stockOccupyLuaExecutor;
 
     @Override
     public MarketPayOrderEntity queryMarketPayOrderEntityByOutTradeNo(String userId, String outTradeNo) {
@@ -360,35 +359,43 @@ public class TradeRepository implements ITradeRepository {
     }
 
     /**
-     * 占用库存
+     * 占用库存（使用 Lua 脚本保证原子性）
+     * <p>
+     * 修复说明：
+     * 1. 原实现存在漏洞：当 SETNX 失败时，库存已经通过 INCR 增加了，但没有回滚，导致库存泄漏
+     * 2. 新实现使用 Lua 脚本，将"检查库存+扣减库存+加锁"三个操作原子化执行
+     * 3. 如果 SETNX 失败，Lua 脚本会自动回滚库存，避免库存泄漏
      * <p>
      * 关于 Redis 独占锁和无锁化设计；<a href="https://bugstack.cn/md/road-map/redis.html">Redis 缓存、加锁(独占/分段)、发布/订阅，常用特性的使用和高级编码操作</a>
      */
     @Override
     public boolean occupyTeamStock(String teamStockKey, String recoveryTeamStockKey, Integer target, Integer validTime) {
-        // 失败恢复量
+        // 1. 获取失败恢复量（系统失败时记录的量）
         Long recoveryCount = redisService.getAtomicLong(recoveryTeamStockKey);
         recoveryCount = null == recoveryCount ? 0 : recoveryCount;
 
-        // 1. incr 得到值，与总量和恢复量做对比。恢复量为系统失败时候记录的量。
-        // 2. 从有组队量开始，相当于已经有了一个占用量，所以要 +1
-        long occupy = redisService.incr(teamStockKey) + 1;
+        // 2. 构建锁 key 前缀：teamStockKey + "_"
+        // 注意：完整的 lockKey 会在 Lua 脚本中构建（lockKeyPrefix + occupy），
+        // 因为 occupy 值是在 Lua 脚本执行过程中通过 INCR 计算出来的
+        String lockKeyPrefix = teamStockKey + Constants.UNDERLINE;
+        
+        // 3. 使用 Lua 脚本原子化执行：检查库存 + 扣减库存 + 加锁
+        // 如果 SETNX 失败，Lua 脚本会自动回滚库存
+        // validTime + 60分钟，是一个延后时间的设计，让数据保留时间稍微长一些，便于排查问题
+        boolean success = stockOccupyLuaExecutor.occupyStock(
+                teamStockKey,
+                lockKeyPrefix,
+                target,
+                recoveryCount,
+                validTime + 60
+        );
 
-        if (occupy > target + recoveryCount) {
-            redisService.decr(teamStockKey);
-            return false;
+        if (!success) {
+            log.warn("组队库存占用失败 teamStockKey:{} target:{} recoveryCount:{}", 
+                    teamStockKey, target, recoveryCount);
         }
 
-        // 1. 给每个产生的值加锁为兜底设计，虽然incr操作是原子的，基本不会产生一样的值。但在实际生产中，遇到过集群的运维配置问题，以及业务运营配置数据问题，导致incr得到的值相同。
-        // 2. validTime + 60分钟，是一个延后时间的设计，让数据保留时间稍微长一些，便于排查问题。
-        String lockKey = teamStockKey + Constants.UNDERLINE + occupy;
-        Boolean lock = redisService.setNx(lockKey, validTime + 60, TimeUnit.MINUTES);
-
-        if (!lock) {
-            log.info("组队库存加锁失败 {}", lockKey);
-        }
-
-        return lock;
+        return success;
     }
 
     @Override

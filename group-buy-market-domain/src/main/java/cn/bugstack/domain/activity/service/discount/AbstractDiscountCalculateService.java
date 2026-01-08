@@ -19,7 +19,6 @@ public abstract class AbstractDiscountCalculateService implements IDiscountCalcu
     @Resource
     protected IActivityRepository repository;
 
-    @Override
     public BigDecimal calculate(String userId, BigDecimal originalPrice, GroupBuyActivityDiscountVO.GroupBuyDiscount groupBuyDiscount) {
         // 1. 人群标签过滤
         if (DiscountTypeEnum.TAG.equals(groupBuyDiscount.getDiscountType())){
@@ -38,6 +37,6 @@ public abstract class AbstractDiscountCalculateService implements IDiscountCalcu
         return repository.isTagCrowdRange(tagId, userId);
     }
 
-    protected abstract BigDecimal doCalculate(BigDecimal originalPrice, GroupBuyActivityDiscountVO.GroupBuyDiscount groupBuyDiscount);
+    //protected abstract BigDecimal doCalculate(BigDecimal originalPrice, GroupBuyActivityDiscountVO.GroupBuyDiscount groupBuyDiscount);
 
 }

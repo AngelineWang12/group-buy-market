@@ -31,7 +31,7 @@ public class ITradeRefundOrderServiceTest {
     public void test_refundOrder() throws Exception {
         TradeRefundCommandEntity tradeRefundCommandEntity = TradeRefundCommandEntity.builder()
                 .userId("xfg02")
-                .outTradeNo("061974054911")
+                .outTradeNo("015948972538")
                 .source("s01")
                 .channel("c01")
                 .build();
@@ -42,7 +42,7 @@ public class ITradeRefundOrderServiceTest {
         log.info("测试结果:{}", JSON.toJSONString(tradeRefundBehaviorEntity));
 
         // 暂停，等待MQ消息。处理完后，手动关闭程序
-        new CountDownLatch(1).await();
+//        new CountDownLatch(1).await();
     }
 
 }

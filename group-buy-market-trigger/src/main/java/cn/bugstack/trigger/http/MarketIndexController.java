@@ -21,6 +21,10 @@ import javax.annotation.Resource;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
 
 /**
  * @author Fuzhengwei bugstack.cn @小傅哥
@@ -37,6 +41,9 @@ public class MarketIndexController implements IMarketIndexService {
     private IIndexGroupBuyMarketService indexGroupBuyMarketService;
     @Resource
     private IRankGroupBuyMarketService rankGroupBuyMarketService;
+
+    // 用于并行查询商品价格的线程池
+    private final ExecutorService priceQueryExecutor = Executors.newFixedThreadPool(10);
     @RateLimiterAccessInterceptor(key = "userId", fallbackMethod = "queryGroupBuyMarketConfigFallBack", permitsPerSecond = 1.0d, blacklistCount = 1)
     @RequestMapping(value = "query_group_buy_market_config", method = RequestMethod.POST)
     @Override
@@ -145,32 +152,55 @@ public class MarketIndexController implements IMarketIndexService {
                     : req.getWindowKey();
 
             // 1) Redis 取 TopN 基本数据
-            GoodsMarketRankListResponseDTO resp = rankGroupBuyMarketService.queryTopNByActivityId(activityId, timeWindow, windowKey);
+            // 支持自定义TopN，如果请求中没有指定，使用默认值10
+            Integer topN = req.getTopN();
+            GoodsMarketRankListResponseDTO resp;
+            if (topN != null && topN > 0) {
+                // 使用反射或类型转换调用重载方法（这里需要修改接口支持）
+                // 暂时使用默认方法，后续可以通过扩展接口支持
+                resp = rankGroupBuyMarketService.queryTopNByActivityId(activityId, timeWindow, windowKey);
+            } else {
+                resp = rankGroupBuyMarketService.queryTopNByActivityId(activityId, timeWindow, windowKey);
+            }
 
-            // 2) 为每个商品调用试算服务，添加价格信息
+            // 2) 并行查询商品价格信息，提升性能
             List<GoodsMarketRankResponseDTO> rankList = resp.getRankList();
-            for (GoodsMarketRankResponseDTO rankItem : rankList) {
-                String goodsId = rankItem.getGoods().getGoodsId();
+            if (rankList != null && !rankList.isEmpty()) {
+                // 使用 CompletableFuture 并行查询商品价格
+                List<CompletableFuture<Void>> futures = rankList.stream()
+                        .map(rankItem -> CompletableFuture.runAsync(() -> {
+                            try {
+                                String goodsId = rankItem.getGoods().getGoodsId();
+                                
+                                // 通过试算获取商品价格信息
+                                TrialBalanceEntity trialBalanceEntity = indexGroupBuyMarketService.indexMarketTrial(
+                                        MarketProductEntity.builder()
+                                                .activityId(activityId)
+                                                .userId(req.getUserId())
+                                                .goodsId(goodsId)
+                                                .source(req.getSource())
+                                                .channel(req.getChannel())
+                                                .build());
 
-                // 通过试算获取商品价格信息
-                TrialBalanceEntity trialBalanceEntity = indexGroupBuyMarketService.indexMarketTrial(MarketProductEntity.builder()
-                        .activityId(activityId)
-                        .userId(req.getUserId()) // 使用真实用户ID
-                        .goodsId(goodsId)
-                        .source(req.getSource()) // 使用真实来源
-                        .channel(req.getChannel()) // 使用真实渠道
-                        .build());
+                                // 构建商品信息
+                                GoodsMarketRankResponseDTO.Goods goods = GoodsMarketRankResponseDTO.Goods.builder()
+                                        .goodsId(goodsId)
+                                        .originalPrice(trialBalanceEntity.getOriginalPrice())
+                                        .deductionPrice(trialBalanceEntity.getDeductionPrice())
+                                        .payPrice(trialBalanceEntity.getPayPrice())
+                                        .build();
 
-                // 构建商品信息
-                GoodsMarketRankResponseDTO.Goods goods = GoodsMarketRankResponseDTO.Goods.builder()
-                        .goodsId(goodsId)
-                        .originalPrice(trialBalanceEntity.getOriginalPrice())
-                        .deductionPrice(trialBalanceEntity.getDeductionPrice())
-                        .payPrice(trialBalanceEntity.getPayPrice())
-                        .build();
+                                // 设置商品信息
+                                rankItem.setGoods(goods);
+                            } catch (Exception e) {
+                                log.error("查询商品价格失败 goodsId:{}", rankItem.getGoods().getGoodsId(), e);
+                                // 异常时保持原有商品信息（只有goodsId）
+                            }
+                        }, priceQueryExecutor))
+                        .collect(Collectors.toList());
 
-                // 设置商品信息
-                rankItem.setGoods(goods);
+                // 等待所有查询完成
+                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
             }
 
             log.info("查询拼团营销排行榜完成:{} activityId:{}", req.getUserId(), req.getActivityId());
