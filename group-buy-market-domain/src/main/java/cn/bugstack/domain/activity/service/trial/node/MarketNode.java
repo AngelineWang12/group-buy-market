@@ -103,7 +103,7 @@ public class MarketNode extends AbstractGroupBuyMarketSupport<MarketProductEntit
         }
 
         // 折扣价格
-        BigDecimal payPrice = discountCalculateService.calculate(requestParameter.getUserId(), skuVO.getOriginalPrice(), groupBuyDiscount);
+        BigDecimal payPrice = discountCalculateService.doCalculate(skuVO.getOriginalPrice(), groupBuyDiscount);
         dynamicContext.setDeductionPrice(skuVO.getOriginalPrice().subtract(payPrice));
         dynamicContext.setPayPrice(payPrice);
 

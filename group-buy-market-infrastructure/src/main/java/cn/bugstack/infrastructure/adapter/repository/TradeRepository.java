@@ -88,7 +88,7 @@ public class TradeRepository implements ITradeRepository {
                 .build();
     }
 
-    @Transactional(timeout = 500)
+    @Transactional(timeout = 3000)  // 优化：从500ms增加到3000ms，应对高并发场景下的数据库操作
     @Override
     public MarketPayOrderEntity lockMarketPayOrder(GroupBuyOrderAggregate groupBuyOrderAggregate) {
         // 聚合对象信息

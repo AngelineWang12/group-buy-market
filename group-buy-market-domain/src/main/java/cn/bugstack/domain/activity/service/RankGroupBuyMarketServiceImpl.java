@@ -72,9 +72,7 @@ public class RankGroupBuyMarketServiceImpl implements IRankGroupBuyMarketService
         Date updateTime = rankRedisRepository.getUpdateTime(metaKey);
 
         // 3) 获取统计信息（用于后续扩展，如显示总商品数等）
-        long[] statistics = rankRedisRepository.getRankStatistics(zsetKey);
-        // long totalCount = statistics[0];
-        // long totalScore = statistics[1];
+        // 统计信息将在后面获取和使用
 
         // 4) 组装排行榜数据，只包含基本信息，价格信息将在Controller中通过试算获取
         List<GoodsMarketRankResponseDTO> rankList = new ArrayList<>();

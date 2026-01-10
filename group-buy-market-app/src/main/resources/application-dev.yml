@@ -6,7 +6,7 @@ server:
       enabled: true
     max-connections: 20 # 最大连接数
     threads:
-      max: 20         # 设定处理客户请求的线程的最大数目，决定了服务器可以同时响应客户请求的数,默认200
+      max: 400         # 设定处理客户请求的线程的最大数目，决定了服务器可以同时响应客户请求的数,默认200
       min-spare: 10   # 初始化线程数,最小空闲线程数,默认是10
     accept-count: 10  # 等待队列长度
 
@@ -34,17 +34,18 @@ spring:
       pool-name: Retail_HikariCP
       minimum-idle: 15 #最小空闲连接数量
       idle-timeout: 180000 #空闲连接存活最大时间，默认600000（10分钟）
-      maximum-pool-size: 25 #连接池最大连接数，默认是10
+      maximum-pool-size: 50 #连接池最大连接数，默认是10
       auto-commit: true  #此属性控制从池返回的连接的默认自动提交行为,默认值：true
       max-lifetime: 1800000 #此属性控制池中连接的最长生命周期，值0表示无限生命周期，默认1800000即30分钟
       connection-timeout: 30000 #数据库连接超时时间,默认30秒，即30000
       connection-test-query: SELECT 1
   # RabbitMQ
   rabbitmq:
-    addresses: localhost
-    port: 15672
-    username: admin
-    password: admin
+    addresses: 172.16.0.24
+    port: 5672
+    username: appuser
+    password: app123456
+    virtual-host: /
     listener:
       simple:
         prefetch: 1 # 每次投递n个消息，消费完在投递n个
@@ -80,7 +81,7 @@ mybatis:
 redis:
   sdk:
     config:
-      host: localhost
+      host: redis
       port: 16379
       pool-size: 10
       min-idle-size: 5
@@ -97,12 +98,12 @@ xfg:
     config:
       system: group-buy-market
       register:
-        host: localhost
+        host: 172.16.0.24
         port: 16379
 
 # 日志；logstash部署的服务器IP
 logstash:
-  host: 127.0.0.1
+  host: 172.16.0.24
 
 # 监控配置 Prometheus + Grafana
 management:
@@ -117,14 +118,8 @@ management:
     export:
       prometheus:
         enabled: true # 启用Prometheus
-    distribution:
-      percentiles-histogram:
-        http.server.requests: true
-      percentiles:
-        http.server.requests: 0.95, 0.99
   prometheus:
     enabled: true # 启用Prometheus端点
-
 
 # 日志
 logging:
